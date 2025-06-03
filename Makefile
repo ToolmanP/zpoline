@@ -7,7 +7,7 @@ CLEANFILES = $(PROGS) *.o *.d
 SRCDIR ?= ./
 
 NO_MAN=
-CFLAGS = -O3 -pipe
+CFLAGS += -O3 -pipe
 CFLAGS += -g -rdynamic
 CFLAGS += -Werror -Wall -Wunused-function
 CFLAGS += -Wextra
