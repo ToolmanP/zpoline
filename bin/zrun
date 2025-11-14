@@ -1,0 +1,15 @@
+#!/bin/bash
+
+if [[ -z "$LIBZPHOOK" ]]; then
+  echo "LIBZPHOOK is not set. Exiting."
+  exit 1
+fi
+
+if [[ ! -f "$LIBZPHOOK" ]]; then
+  echo "LIBZPHOOK file does not exist at path: ${LIBZPHOOK}. Exiting."
+  exit 1
+fi
+
+export LIBZPHOOK="$LIBZPHOOK"
+export LD_PRELOAD=/usr/local/lib/libzpoline.so
+exec bash -c "$*"

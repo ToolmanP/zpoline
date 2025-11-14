@@ -5,10 +5,11 @@ CC = gcc
 CLEANFILES = $(PROGS) *.o *.d
 
 SRCDIR ?= ./
+PREFIX ?=
 
 NO_MAN=
 CFLAGS += -O3 -pipe
-CFLAGS += -g -rdynamic
+CFLAGS += -rdynamic
 CFLAGS += -Werror -Wall -Wunused-function
 CFLAGS += -Wextra
 CFLAGS += -shared -fPIC
@@ -32,6 +33,9 @@ all: $(PROGS)
 
 $(PROGS): $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+install: $(PROGS)
+	install -m -0644 $(PROGS) $(PREFIX)/usr/local/lib/$(PROGS)
 
 clean:
 	-@rm -rf $(CLEANFILES)

@@ -274,14 +274,18 @@ static int do_rewrite(void *data, const char *fmt, ...)
 #endif
 {
 	struct disassembly_state *s = (struct disassembly_state *) data;
-	char buf[4096];
+	static char win[3][4096] = {0};
+  char *buf = win[0];
 	va_list arg;
 	va_start(arg, fmt);
+  strcpy(win[2], win[1]);
+  strcpy(win[1], win[0]);
 	vsprintf(buf, fmt, arg);
 	if (strstr(buf, "(%rsp)") && !strncmp(buf, "-", 1)) {
+    int32_t is_mov = strstr(win[2], "mov") != NULL || strstr(win[1], "mov") != NULL;
 		int32_t off;
 		sscanf(buf, "%x(%%rsp)", &off);
-		if (-0x78 > off && off >= -0x80) {
+		if (-0x78 > off && off >= -0x80 && is_mov) {
 			printf("\x1b[41mthis cannot be handled: %s\x1b[39m\n", buf);
 			assert(0);
 		} else if (off < -0x80) {
