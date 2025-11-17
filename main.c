@@ -274,18 +274,14 @@ static int do_rewrite(void *data, const char *fmt, ...)
 #endif
 {
 	struct disassembly_state *s = (struct disassembly_state *) data;
-	static char win[3][4096] = {0};
-  char *buf = win[0];
+  char buf[4096];
 	va_list arg;
 	va_start(arg, fmt);
-  strcpy(win[2], win[1]);
-  strcpy(win[1], win[0]);
 	vsprintf(buf, fmt, arg);
 	if (strstr(buf, "(%rsp)") && !strncmp(buf, "-", 1)) {
-    int32_t is_mov = strstr(win[2], "mov") != NULL || strstr(win[1], "mov") != NULL;
 		int32_t off;
 		sscanf(buf, "%x(%%rsp)", &off);
-		if (-0x78 > off && off >= -0x80 && is_mov) {
+		if (-0x78 > off && off >= -0x80) {
 			printf("\x1b[41mthis cannot be handled: %s\x1b[39m\n", buf);
 			assert(0);
 		} else if (off < -0x80) {
@@ -328,6 +324,46 @@ skip:
 	return 0;
 }
 
+
+#if defined(DIS_ASM_VER_239)
+static int do_rewrite_no_redzone(void *data, enum disassembler_style style ATTRIBUTE_UNUSED, const char *fmt, ...)
+#else
+static int do_rewrite_no_redzone(void *data, const char *fmt, ...) 
+#endif
+{
+	struct disassembly_state *s = (struct disassembly_state *) data;
+  char buf[4096];
+	va_list arg;
+	va_start(arg, fmt);
+	vsprintf(buf, fmt, arg);
+	if (!strncmp(buf, "syscall", 7) || !strncmp(buf, "sysenter", 8)) {
+		uint8_t *ptr = (uint8_t *)(((uintptr_t) s->code) + s->off);
+		if ((uintptr_t) ptr == (uintptr_t) syscall_addr) {
+			/*
+			 * skip the syscall replacement for
+			 * our system call hook (enter_syscall)
+			 * so that it can issue system calls.
+			 */
+			goto skip;
+		}
+		ptr[0] = 0xff; // callq
+		ptr[1] = 0xd0; // *%rax
+#ifdef SUPPLEMENTAL__REWRITTEN_ADDR_CHECK
+		record_replaced_instruction_addr((uintptr_t) ptr);
+#endif
+	}
+skip:
+	va_end(arg);
+	return 0;
+}
+
+
+#if defined(DIS_ASM_VER_239)
+fprintf_styled_ftype do_rewrite_func;
+#else
+fprintf_ftype do_rewrite_func;
+#endif
+
 /* find syscall and sysenter using the disassembler, and rewrite them */
 static void disassemble_and_rewrite(char *code, size_t code_size, int mem_prot)
 {
@@ -336,9 +372,9 @@ static void disassemble_and_rewrite(char *code, size_t code_size, int mem_prot)
 	assert(!mprotect(code, code_size, PROT_WRITE | PROT_READ | PROT_EXEC));
 	disassemble_info disasm_info = { 0 };
 #if defined(DIS_ASM_VER_239)
-	init_disassemble_info(&disasm_info, &s, (fprintf_ftype) printf, do_rewrite);
+	init_disassemble_info(&disasm_info, &s, (fprintf_ftype) printf, do_rewrite_func);
 #else
-	init_disassemble_info(&disasm_info, &s, do_rewrite);
+	init_disassemble_info(&disasm_info, &s, do_rewrite_func);
 #endif
 	disasm_info.arch = bfd_arch_i386;
 	disasm_info.mach = bfd_mach_x86_64;
@@ -544,6 +580,10 @@ __attribute__((constructor(0xffff))) static void __zpoline_init(void)
 			MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE,
 			-1, 0)) != MAP_FAILED);
 #endif
+  if(getenv("ZP_REDZONE"))
+    do_rewrite_func = do_rewrite;
+  else
+    do_rewrite_func = do_rewrite_no_redzone;
 	setup_trampoline();
 	rewrite_code();
 	load_hook_lib();
